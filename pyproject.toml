@@ -1,0 +1,37 @@
+[project]
+name = "torchgl"
+version = "0.1.0"
+description = "Interop between ModernGL and PyTorch CUDA"
+readme = "README.md"
+requires-python = ">=3.10"
+
+authors = [
+    { name = "Adam Alcolado", email = "adam.alcolado@mtl.ai" }
+]
+
+dependencies = [
+    "cuda-python",
+    "moderngl",
+    "numpy",
+    "torch",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.0",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[build-system]
+requires = ["uv_build>=0.9.7,<0.10.0"]
+build-backend = "uv_build"
