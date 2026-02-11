@@ -4,6 +4,8 @@ import cuda.bindings.runtime as cudart
 import moderngl
 import torch
 
+if not torch.cuda.is_available():
+    raise RuntimeError("PyTorch with CUDA backend is required")
 
 def _check_cuda_error(result: Any):
     # cuda calls should return a tuple with the error has the first item
@@ -56,17 +58,23 @@ _registered_textures: dict[int, tuple[cudart.cudaGraphicsResource_t, Mode]] = di
 
 def register(texture: moderngl.Texture, mode: Mode):
     """
-    Registers a texture for interop with torch/cuda.
+    Register a ModernGL texture for CUDA interoperability.
 
-    After registering, the texture can be mapped and converted to a tensor.
+    This function is provided for advanced usage. For basic usage, the texture will automatically be registered
+    and unregistered as needed.
 
-    Cannot register the same texture again until it is unregistered.
+    If you manually register a texture, you are also responsible for mapping or unmapping the texture as required.
 
-    The mode parameter determines how the texture will be accessed by torch/cuda
-    "r": will only be read from by torch/cuda (can be used in to_tensor())
-    "w": will only be written to by torch/cuda (can be used in to_texture())
-    "rw": will be both read from and written to by torch/cuda
-
+    Parameters
+    ----------
+    texture : moderngl.Texture
+        The ModernGL texture to register. Only textures with 1, 2, or 4 components
+        are supported. The texture formats "ni1" and "ni2" are explicitly not supported.
+    mode : {"r", "w", "rw"}
+        Access mode describing how PyTorch-CUDA will use the texture:
+        - "r"  : read-only (usable with `to_tensor()`)
+        - "w"  : write-only (usable with `to_texture()`)
+        - "rw" : read–write
     """
 
     if texture.glo in _registered_textures:
@@ -105,9 +113,15 @@ def register(texture: moderngl.Texture, mode: Mode):
 
 def unregister(texture: moderngl.Texture):
     """
-    Unregisters a texture.
+    Unregister a ModernGL texture for CUDA interoperability.
 
-    The texture can no longer be mapped and converted to a tensor.
+    This function is provided for advanced usage. For basic usage, the texture will automatically be registered
+    and unregistered as needed.
+
+    Parameters
+    ----------
+    texture : moderngl.Texture
+        The ModernGL texture to unregister. Must have been registered previously with `register()`.
     """
     if texture.glo not in _registered_textures:
         raise ValueError("Texture not registered")
@@ -121,9 +135,19 @@ def unregister(texture: moderngl.Texture):
 
 def map(texture: moderngl.Texture):
     """
-    Maps a texture so that it can be converted to or from a tensor.
+    Map a ModernGL texture for CUDA interoperability.
 
-    All OpenGL work will complete before work begins in thh current torch/cuda stream (torch.cuda.current_stream())
+    Mapping will ensure all pending OpenGL operations complete before work begins in the current CUDA stream
+    (given by `torch.cuda.current_stream()`).
+
+    This function is provided for advanced usage. For basic usage, the texture will automatically be mapped and
+    unmapped as required.
+
+    Parameters
+    ----------
+    texture : moderngl.Texture
+        The texture to map. It must have been previously registered using
+        `register()`.
     """
 
     if texture.glo not in _registered_textures:
@@ -137,9 +161,18 @@ def map(texture: moderngl.Texture):
 
 def unmap(texture: moderngl.Texture):
     """
-    Unmaps a texture so it can no longer be converted to or from a tensor.
+    Unmap a ModernGL texture for CUDA interoperability.
 
-    All work in current torch/cuda stream (torch.cuda.current_stream()) will complete before subsequent OpenGL work begins.
+    Unmapping will ensure all work in the current CUDA stream (given by `torch.cuda.current_stream()`) will complete
+    before any OpenGL work starts.
+
+    This function is provided for advanced usage. For basic usage, the texture will automatically be mapped and
+    unmapped as required.
+
+    Parameters
+    ----------
+    texture : moderngl.Texture
+        The texture to unmap. It must have been previously mapped using `map()`.
     """
 
     if texture.glo not in _registered_textures:
@@ -154,10 +187,13 @@ def unmap(texture: moderngl.Texture):
 
 def to_tensor(texture: moderngl.Texture) -> torch.Tensor:
     """
-    Convert a ModernGL texture into a CUDA-backed PyTorch tensor.
+    Copy a ModernGL texture to a CUDA tensor.
 
-    The returned tensor resides on the current CUDA device and has a dtype
-    that is inferred from the texture's format. The shape of the tensor is
+    The returned tensor resides on the current device and has a dtype
+    that is inferred from the texture's format. The returned tensor will have shape (H, W, C), where
+    (W, H) is the size of the texture and C is the number of components (1, 2, or 4).
+
+    If the texture is not registered, it will temporarily be registered and mapped for the copy.
 
     Parameters
     ----------
@@ -168,20 +204,6 @@ def to_tensor(texture: moderngl.Texture) -> torch.Tensor:
     -------
     torch.Tensor
         A CUDA tensor containing the texture's pixel data.
-
-    Raises
-    ------
-    ValueError
-        If the texture is registered with an access mode that does not permit
-        reading (must be 'r' or 'rw').
-    RuntimeError
-        If any CUDA runtime call fails during mapping or data transfer.
-
-    Notes
-    -----
-    If the texture was not previously registered by the user, it will be
-    automatically registered, mapped, unmapped, and unregistered as part of
-    this call.
     """
 
     is_registered_by_user = texture.glo in _registered_textures
@@ -233,6 +255,28 @@ def to_tensor(texture: moderngl.Texture) -> torch.Tensor:
 def to_texture(
     tensor: torch.Tensor, texture: moderngl.Texture = None
 ) -> moderngl.Texture:
+    """
+    Copy a CUDA tensor into a ModernGL texture.
+
+    If no texture is provided, a new one is created with dimensions and format
+    inferred from the tensor. The tensor must have shape (H, W, C) with
+    1, 2, or 4 channels, and its dtype must correspond with the ModernGL format of the texture.
+
+    If the texture is not registered, it will temporarily be registered and mapped for the copy.
+
+    Parameters
+    ----------
+    tensor: torch.Tensor
+        A CUDA tensor containing the pixel data.
+
+    texture : moderngl.Texture, optional
+        The ModernGL texture to store the pixel data in.
+
+    Returns
+    -------
+    torch.Tensor
+        A CUDA tensor containing the texture's pixel data.
+    """
 
     if tensor.ndim != 3:
         raise ValueError("Tensor must have 3 dims")
