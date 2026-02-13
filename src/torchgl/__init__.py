@@ -7,6 +7,7 @@ import torch
 if not torch.cuda.is_available():
     raise RuntimeError("PyTorch with CUDA backend is required")
 
+
 def _check_cuda_error(result: Any):
     # cuda calls should return a tuple with the error has the first item
     assert isinstance(result, tuple)
@@ -258,7 +259,7 @@ def to_texture(
     """
     Copy a CUDA tensor into a ModernGL texture.
 
-    If no texture is provided, a new one is created with dimensions and format
+    If no texture is provided, a new one is created (from the current context) with dimensions and format
     inferred from the tensor. The tensor must have shape (H, W, C) with
     1, 2, or 4 channels, and its dtype must correspond with the ModernGL format of the texture.
 
