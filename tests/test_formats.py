@@ -4,7 +4,7 @@ import torch
 import torchgl as tgl
 
 
-def test():
+def test_formats():
     h, w = 1077, 1923
     device = "cuda"
 
@@ -12,8 +12,24 @@ def test():
     for k, v in ctx.info.items():
         print(k, v)
 
+    # these give expected results
+    # ni1, and ni2 are surprising
+    nice_gl_to_torch_types = {
+        "f1": torch.uint8,
+        "f2": torch.float16,
+        "f4": torch.float32,
+        "u1": torch.uint8,
+        "u2": torch.uint16,
+        "u4": torch.uint32,
+        "i1": torch.int8,
+        "i2": torch.int16,
+        "i4": torch.int32,
+        "nu1": torch.uint8,
+        "nu2": torch.uint16,
+    }
+
     for test_manual_mapping in (False, True):
-        for gl_format, torch_dtype in tgl._gl_to_torch_dtype.items():
+        for gl_format, torch_dtype in nice_gl_to_torch_types.items():
             for c in (1, 2, 4):
                 if torch_dtype.is_floating_point:
                     input_tensor = torch.rand(h, w, c, dtype=torch_dtype, device=device)
@@ -64,3 +80,6 @@ def test():
 
                 assert converted_tensor.dtype == input_tensor.dtype
                 assert torch.equal(converted_tensor, input_tensor)
+
+if __name__ == "__main__":
+    test_formats()

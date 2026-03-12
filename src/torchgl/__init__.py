@@ -25,33 +25,46 @@ def _check_cuda_error(result: Any):
 
 Mode = Literal["r", "w", "rw"]
 
-# Mapping of supported ModernGL texture formats to their corresponding PyTorch dtypes.
-# The PyTorch dtype reflects the NumPy dtype that should be used when supplying texture data.
-#
-# The signed normalized formats 'ni1' and 'ni2' are intentionally excluded due to their
-# potential for user confusion.
-#
-# Note: These conversions assume that ModernGL (and the underlying OpenGL driver) selects the
-# expected internal texture format. If the user overrides the internal format, or if the driver
-# chooses a different one, the dtype mapping may no longer be valid.
-_gl_to_torch_dtype: dict[str, torch.dtype] = {
-    "f1": torch.uint8,
-    "f2": torch.float16,
-    "f4": torch.float32,
-    "u1": torch.uint8,
-    "u2": torch.uint16,
-    "u4": torch.uint32,
-    "i1": torch.int8,
-    "i2": torch.int16,
-    "i4": torch.int32,
-    "nu1": torch.uint8,
-    "nu2": torch.uint16,
+# preferred ModernGL dtype for a given torch tensor dtype
+_torch_to_gl_dtype = {
+    torch.uint8: "f1",
+    torch.uint16: "u2",
+    torch.uint32: "u4",
+    torch.int8: "i1",
+    torch.int16: "i2",
+    torch.int32: "i4",
+    torch.float16: "f2",
+    torch.float32: "f4"
 }
-# Builds the reverse mapping: torch.dtype -> list[str].
-# Multiple ModernGL formats may correspond to the same torch dtype.
-_torch_to_gl_formats: dict[torch.dtype, list[str]] = {}
-for _gl_format, _torch_dtype in _gl_to_torch_dtype.items():
-    _torch_to_gl_formats.setdefault(_torch_dtype, []).append(_gl_format)
+
+def _create_descriptor(c: int, dtype: torch.dtype) -> tuple[int, int, int, int, cudart.cudaChannelFormatKind]:
+    """
+    Match the information in cudaChannelFormatDesc to the info needed to create a tensor.
+
+    Returns bit-depth in (x, y, z, w) components + kind (either signed, unsigned, or float).
+    """
+
+    if c not in (1, 2, 4):
+        raise ValueError(f"channels must be 1, 2, or 4, got {c}")
+
+    if dtype.is_floating_point:
+        kind = cudart.cudaChannelFormatKind.cudaChannelFormatKindFloat
+    elif dtype.is_signed:
+        kind = cudart.cudaChannelFormatKind.cudaChannelFormatKindSigned
+    else:
+        kind = cudart.cudaChannelFormatKind.cudaChannelFormatKindUnsigned
+
+    bits: int = (torch.finfo(dtype) if dtype.is_floating_point else torch.iinfo(dtype)).bits
+
+    bits_x, bits_y, bits_z, bits_w = [bits if i < c else 0 for i in range(4)]
+
+    return bits_x, bits_y, bits_z, bits_w, kind
+
+_descriptor_to_torch_channels_and_dtype = {
+    _create_descriptor(c, dtype) : (c, dtype)
+    for dtype in _torch_to_gl_dtype.keys() for c in (1, 2, 4)
+}
+
 
 # glo -> (resource handle, mode)
 _registered_textures: dict[int, tuple[cudart.cudaGraphicsResource_t, Mode]] = dict()
@@ -83,11 +96,6 @@ def register(texture: moderngl.Texture, mode: Mode):
 
     if texture.components == 3:
         raise ValueError("Textures with 3 components not supported")
-
-    if texture.dtype not in _gl_to_torch_dtype:
-        raise ValueError(
-            f"Texture format {texture.dtype} is not one of {list(_gl_to_torch_dtype.keys())}"
-        )
 
     if mode not in (
         "r",
@@ -221,9 +229,14 @@ def to_tensor(texture: moderngl.Texture) -> torch.Tensor:
     )
 
     w, h = texture.size
-    c = texture.components
-    assert texture.dtype in _gl_to_torch_dtype
-    dtype = _gl_to_torch_dtype[texture.dtype]
+
+    desc, _extent, _flags = _check_cuda_error(cudart.cudaArrayGetInfo(array))
+
+    descriptor = (desc.x, desc.y, desc.z, desc.w, desc.f)
+    assert descriptor in _descriptor_to_torch_channels_and_dtype, f"Channel description {descriptor} was not expected"
+    c, dtype = _descriptor_to_torch_channels_and_dtype[descriptor]
+    assert c == texture.components, f"Expected texture components ({texture.components}) to match the array channels ({c})"
+
     device = f"cuda:{torch.cuda.current_device()}"
     tensor = torch.empty((h, w, c), dtype=dtype, device=device)
     b = tensor.dtype.itemsize
@@ -288,21 +301,15 @@ def to_texture(
             f"Only tensors with 1, 2, or 4 channels are supported, got {c}"
         )
 
-    if tensor.dtype not in _torch_to_gl_formats:
-        raise ValueError(f"Tensor dtype must be in {list(_torch_to_gl_formats.keys())}")
+    if tensor.dtype not in _torch_to_gl_dtype:
+         raise ValueError(f"Tensor dtype must be in {list(_torch_to_gl_dtype.keys())}")
     b = tensor.dtype.itemsize
 
-    expected_formats = _torch_to_gl_formats[tensor.dtype]
     if texture is None:
         ctx = moderngl.get_context()
         texture = ctx.texture(
-            (w, h), components=c, dtype=expected_formats[0]
+            (w, h), components=c, dtype=_torch_to_gl_dtype[tensor.dtype]
         )  # assume the first format is preferred
-
-    if texture.dtype not in expected_formats:
-        raise ValueError(
-            f"Expected a texture with format one of {expected_formats}, got {texture.dtype}"
-        )
 
     is_already_registered = texture.glo in _registered_textures
     if not is_already_registered:
