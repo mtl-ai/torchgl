@@ -78,5 +78,4 @@ Streams are also supported, although you should be aware of how they work with t
 see [docs here](https://docs.pytorch.org/docs/stable/notes/cuda.html#cuda-semantics).
 
 # Related Packages
-[torch2moderngl](https://github.com/geospaitial-lab/torch2moderngl) provides similar basic usage. It
-requires compiling extension code, and does not offer advanced usage. 
+[torch2moderngl](https://github.com/geospaitial-lab/torch2moderngl) provides similar basic usage for Textures only.
