@@ -81,5 +81,6 @@ def test_formats():
                 assert converted_tensor.dtype == input_tensor.dtype
                 assert torch.equal(converted_tensor, input_tensor)
 
+
 if __name__ == "__main__":
     test_formats()

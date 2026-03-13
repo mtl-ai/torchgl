@@ -34,10 +34,13 @@ _torch_to_gl_dtype = {
     torch.int16: "i2",
     torch.int32: "i4",
     torch.float16: "f2",
-    torch.float32: "f4"
+    torch.float32: "f4",
 }
 
-def _create_descriptor(c: int, dtype: torch.dtype) -> tuple[int, int, int, int, cudart.cudaChannelFormatKind]:
+
+def _create_descriptor(
+    c: int, dtype: torch.dtype
+) -> tuple[int, int, int, int, cudart.cudaChannelFormatKind]:
     """
     Match the information in cudaChannelFormatDesc to the info needed to create a tensor.
 
@@ -54,15 +57,19 @@ def _create_descriptor(c: int, dtype: torch.dtype) -> tuple[int, int, int, int, 
     else:
         kind = cudart.cudaChannelFormatKind.cudaChannelFormatKindUnsigned
 
-    bits: int = (torch.finfo(dtype) if dtype.is_floating_point else torch.iinfo(dtype)).bits
+    bits: int = (
+        torch.finfo(dtype) if dtype.is_floating_point else torch.iinfo(dtype)
+    ).bits
 
     bits_x, bits_y, bits_z, bits_w = [bits if i < c else 0 for i in range(4)]
 
     return bits_x, bits_y, bits_z, bits_w, kind
 
+
 _descriptor_to_torch_channels_and_dtype = {
-    _create_descriptor(c, dtype) : (c, dtype)
-    for dtype in _torch_to_gl_dtype.keys() for c in (1, 2, 4)
+    _create_descriptor(c, dtype): (c, dtype)
+    for dtype in _torch_to_gl_dtype.keys()
+    for c in (1, 2, 4)
 }
 
 
@@ -294,7 +301,6 @@ def to_texture(
     if not tensor.is_cuda:
         raise ValueError("Tensor must be on cuda device")
 
-
     if tensor.ndim != 3:
         raise ValueError("Tensor must have 3 dims")
 
@@ -305,7 +311,7 @@ def to_texture(
         )
 
     if tensor.dtype not in _torch_to_gl_dtype:
-         raise ValueError(f"Tensor dtype must be in {list(_torch_to_gl_dtype.keys())}")
+        raise ValueError(f"Tensor dtype must be in {list(_torch_to_gl_dtype.keys())}")
     b = tensor.dtype.itemsize
 
     if texture is None:
@@ -313,6 +319,11 @@ def to_texture(
         texture = ctx.texture(
             (w, h), components=c, dtype=_torch_to_gl_dtype[tensor.dtype]
         )  # assume the first format is preferred
+
+    if (texture.size, texture.components) != ((w, h), c):
+        raise ValueError(
+            f"Texture with size {texture.size} and components {texture.components} does not correspond to tensor with shape {tuple(tensor.shape)}"
+        )
 
     is_already_registered = texture.glo in _registered_textures
     if not is_already_registered:
