@@ -242,10 +242,10 @@ def to_tensor(
 
     In the case of a Buffer object, the returned Tensor will have shape (N) where N is the Buffer size in bytes,
     and dtype uint8. If an output Tensor is provided, it must be contiguous and have the same size as
-    the buffer in bytes, but may have any shape or dtype. In this case, no intermediate Tensors will need to be
-    created.
+    the buffer in bytes, but may have any shape or dtype. Unlike the case for Textures, no intermediate Tensors
+    will need to be created when an output Tensor is provided.
 
-    If the texture is not registered, it will temporarily be registered and mapped for the copy.
+    If the Texture or Buffer is not registered, it will temporarily be registered and mapped for the copy.
 
     Parameters
     ----------
@@ -459,23 +459,19 @@ def to_texture(
 
 def to_buffer(tensor: torch.Tensor, buffer: moderngl.Buffer = None) -> moderngl.Buffer:
     """
+    Copy a CUDA Tensor into a ModernGL Buffer.
 
+    If no Buffer is provided, a new one is created (from the current context) with the same size in bytes as
+    the incoming Tensor. If a Buffer is provided, it must match the size in bytes of the Tensor.
 
-    asdfasdfasdfasdfasdfadsfadfadfadsfasdf
-    Copy a CUDA tensor into a ModernGL texture.
-
-    If no texture is provided, a new one is created (from the current context) with dimensions and format
-    inferred from the tensor. The tensor must have shape (H, W, C) with
-    1, 2, or 4 channels, and its dtype must correspond with the ModernGL format of the texture.
-
-    If the texture is not registered, it will temporarily be registered and mapped for the copy.
+    If the Buffer is not registered, it will temporarily be registered and mapped for the copy.
 
     Parameters
     ----------
     tensor: torch.Tensor
         A CUDA tensor containing the pixel data.
 
-    texture : moderngl.Texture, optional
+    buffer : moderngl.Texture, optional
         The ModernGL texture to store the pixel data in.
 
     Returns
@@ -508,7 +504,7 @@ def to_buffer(tensor: torch.Tensor, buffer: moderngl.Buffer = None) -> moderngl.
     resource, mode = _registered_objects[key]
 
     if mode not in ("w", "rw"):
-        raise ValueError(f"Invalid texture access mode '{mode}' (need 'w' or 'rw')")
+        raise ValueError(f"Invalid access mode '{mode}' (need 'w' or 'rw')")
 
     ptr, size = _check_cuda_error(cudart.cudaGraphicsResourceGetMappedPointer(resource))
     assert size == buffer.size

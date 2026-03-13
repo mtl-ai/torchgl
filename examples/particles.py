@@ -7,14 +7,13 @@ import torchgl as tgl
 
 
 class Particles(mglw.WindowConfig):
-
     title = "Particles"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         n = 100
         d = 2
-        device = 'cuda'
+        device = "cuda"
         self.k = 1.0 / n
         self.x = torch.rand(n, 2, device=device) * 2.0 - 1.0
         self.v = torch.zeros(n, 2, device=device)
@@ -41,12 +40,9 @@ class Particles(mglw.WindowConfig):
             }
         """
 
-        prog = self.ctx.program(
-            vertex_shader=vtx_shader,
-            fragment_shader=frag_shader
-        )
+        prog = self.ctx.program(vertex_shader=vtx_shader, fragment_shader=frag_shader)
         self.vbo = self.ctx.buffer(reserve=n * d * 4)
-        self.vao = self.ctx.vertex_array(prog, [(self.vbo, '2f', 'in_pos')])
+        self.vao = self.ctx.vertex_array(prog, [(self.vbo, "2f", "in_pos")])
         self.vao.program["point_size"] = 5.0
         self.vao.mode = moderngl.POINTS
         self.ctx.enable(moderngl.PROGRAM_POINT_SIZE)

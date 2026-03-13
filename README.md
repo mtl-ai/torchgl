@@ -1,8 +1,9 @@
 # torchgl
-`torchgl` is a simple library for copying data from PyTorch CUDA tensors to 
-[ModernGL](https://github.com/moderngl/moderngl) textures directly on the GPU. 
+`torchgl` is a simple library for sharing data between PyTorch and [ModernGL](https://github.com/moderngl/moderngl) 
+directly on the GPU. 
 
-It wraps CUDA graphics interoperability calls, which avoids slow cpu round-trips.
+It wraps CUDA graphics interoperability calls, which avoids slow CPU round-trips. No C++ compiling is needed
+since we use the python CUDA API. 
 
 # Use Cases
 - Render visualizations in real-time
@@ -39,6 +40,8 @@ texture = ctx.texture((1920, 1080), 1, dtype="f1")
 tensor = torchgl.to_tensor(texture)
 print(tensor.shape, tensor.dtype)  # torch.Size([1080, 1920, 1]) torch.uint8
 ```
+## Other examples
+See [other examples](examples) here.
 
 # Installation
 `torchgl` is (will be) published on PyPI and can be installed with pip
@@ -55,23 +58,32 @@ pip install cuda-python==12.8
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 ```
 
-# Supported Formats
-In ModernGL, the texture format ([see docs](https://moderngl.readthedocs.io/en/5.8.2/topics/texture_formats.html)) 
-is a combination of an internal OpenGL format and a data type used for supplying data to the texture. 
+# Texture Formats
+`torchgl` supports 1, 2, or 4 component Textures (3 component textures are not supported by CUDA). 
+For most ModernGL dtypes, the converted Tensor type matches what you would use to supply pixel data.
 
-In `torchgl`, The dtype of the tensor will match the dtype you would use supply pixel data to the texture. 
-E.g. `"f1"` textures will convert to and from `unit8` tensors, and `"f2"` textures will convert to and from `float16`. 
+| ModernGL dtype | PyTorch dtype  |
+|----------------|----------------|
+| f1             | uint8          |
+| f2             | half           |        
+| f4             | float32        |       
+| u1             | uint8          |      
+| u2             | uint16         |      
+| u4             | uint32         |    
+| i1             | int8           |   
+| i2             | int16          |  
+| i4             | in32           |
 
-For simplicity, we assume the internal format of the texture is expected one. If you override
-the ModernGL internal format, or if your OpenGL driver selects a different internal format, conversion may
-not behave as expected.
+The exceptions are "ni1", and "ni2" which are really unsigned internally, but the pixel data
+is expected to be signed (GL_BYTE or GL_SHORT), see https://github.com/moderngl/moderngl/blob/main/src/moderngl.cpp#L800. 
+We suggest avoiding these types unless you know really know what you are doing. 
 
-We explicitly exclude the formats `"ni1"` and `"ni2"` because these have unsigned internal formats but are signed
-when supplying pixel data, and we feel this will lead to confusion. 
+Also, if you override ModernGL internal format conversion may not behave as expected.
+
 
 # Advanced Usage
 For more control of the resource management and synchronization between CUDA and OpenGL, 
-you can allocate your textures ahead of time and register them once for interop using `register()`. Then, use
+you can allocate your textures and buffers ahead of time and register them once for interop using `register()`. Then, use
 `map()` and `unmap()` to efficiently pipeline the CUDA and OpenGL and reduce unnecessary synchronization points.
 
 Streams are also supported, although you should be aware of how they work with the PyTorch allocation of CUDA tensors, 
