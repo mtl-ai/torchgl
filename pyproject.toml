@@ -1,6 +1,6 @@
 [project]
 name = "torchgl"
-version = "0.1.0"
+version = "0.1.1"
 description = "Interop between ModernGL and PyTorch CUDA"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,3 +35,6 @@ explicit = true
 [build-system]
 requires = ["uv_build>=0.9.7,<0.10.0"]
 build-backend = "uv_build"
+
+[project.urls]
+GitHub = "https://github.com/mtl-ai/torchgl"

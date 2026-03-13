@@ -44,7 +44,7 @@ print(tensor.shape, tensor.dtype)  # torch.Size([1080, 1920, 1]) torch.uint8
 See [other examples](examples) here.
 
 # Installation
-`torchgl` is (will be) published on PyPI and can be installed with pip
+`torchgl` is can be installed with pip
 
 ```commandline
 pip install torchgl
