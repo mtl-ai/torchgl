@@ -228,14 +228,13 @@ def to_tensor(texture: moderngl.Texture) -> torch.Tensor:
         cudart.cudaGraphicsSubResourceGetMappedArray(resource, 0, 0)
     )
 
-    w, h = texture.size
-
-    desc, _extent, _flags = _check_cuda_error(cudart.cudaArrayGetInfo(array))
+    desc, extent, _flags = _check_cuda_error(cudart.cudaArrayGetInfo(array))
 
     descriptor = (desc.x, desc.y, desc.z, desc.w, desc.f)
-    assert descriptor in _descriptor_to_torch_channels_and_dtype, f"Channel description {descriptor} was not expected"
+    assert descriptor in _descriptor_to_torch_channels_and_dtype
     c, dtype = _descriptor_to_torch_channels_and_dtype[descriptor]
-    assert c == texture.components, f"Expected texture components ({texture.components}) to match the array channels ({c})"
+    w, h = extent.width, extent.height
+    assert ((w, h), c) == (texture.size, texture.components)
 
     device = f"cuda:{torch.cuda.current_device()}"
     tensor = torch.empty((h, w, c), dtype=dtype, device=device)
@@ -291,6 +290,10 @@ def to_texture(
     torch.Tensor
         A CUDA tensor containing the texture's pixel data.
     """
+
+    if not tensor.is_cuda:
+        raise ValueError("Tensor must be on cuda device")
+
 
     if tensor.ndim != 3:
         raise ValueError("Tensor must have 3 dims")
